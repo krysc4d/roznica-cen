@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1e40af">
+  <meta name="color-scheme" content="light dark">
+  <title>Różnica cen</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="top">
+    <h1>Różnica cen</h1>
+    <p class="sub">Półka kontra paragon</p>
+  </header>
+
+  <main>
+    <form id="form" class="card" novalidate autocomplete="off">
+      <label class="field">
+        <span>Produkt lub EAN (opcjonalnie)</span>
+        <input id="name" type="text" maxlength="60" placeholder="np. groszek 400 g">
+      </label>
+
+      <div class="row">
+        <label class="field">
+          <span>Ilość</span>
+          <input id="qty" type="text" inputmode="numeric" value="1" aria-describedby="qty-err">
+        </label>
+        <label class="field">
+          <span>Cena z półki (za 1 szt.)</span>
+          <input id="shelf" type="text" inputmode="decimal" placeholder="0,00">
+        </label>
+      </div>
+
+      <label class="field">
+        <span>Promocja na półce</span>
+        <select id="promo">
+          <option value="none">Brak</option>
+          <option value="multi_price">N sztuk za Z zł (np. 3 za 10 zł)</option>
+          <option value="free">X+Y gratis (np. 2+1)</option>
+          <option value="second_percent">Rabat % na drugą sztukę</option>
+          <option value="percent">Rabat % na produkt</option>
+        </select>
+      </label>
+
+      <div id="promo-multi" class="row promo" hidden>
+        <label class="field"><span>N sztuk</span><input id="pm-n" type="text" inputmode="numeric" placeholder="3"></label>
+        <label class="field"><span>za Z zł</span><input id="pm-total" type="text" inputmode="decimal" placeholder="10,00"></label>
+      </div>
+      <div id="promo-free" class="row promo" hidden>
+        <label class="field"><span>Płatne (X)</span><input id="pf-x" type="text" inputmode="numeric" placeholder="2"></label>
+        <label class="field"><span>Gratis (Y)</span><input id="pf-y" type="text" inputmode="numeric" placeholder="1"></label>
+      </div>
+      <div id="promo-percent" class="row promo" hidden>
+        <label class="field"><span>Rabat %</span><input id="pp-p" type="text" inputmode="decimal" placeholder="50"></label>
+      </div>
+
+      <label class="field">
+        <span>Cena z paragonu (za 1 szt.)</span>
+        <input id="paid" type="text" inputmode="decimal" placeholder="0,00">
+      </label>
+
+      <details>
+        <summary>Na paragonie są osobne rabaty</summary>
+        <label class="field">
+          <span>Zapłacono łącznie za pozycję (po rabatach)</span>
+          <input id="paid-total" type="text" inputmode="decimal" placeholder="0,00">
+          <small>Jeśli wpiszesz, to ta kwota zastąpi cenę za sztukę razy ilość.</small>
+        </label>
+      </details>
+
+      <p id="error" class="error" role="alert" hidden></p>
+
+      <section id="result" class="result" aria-live="polite" hidden>
+        <dl>
+          <div><dt>Należało zapłacić</dt><dd id="r-owed"></dd></div>
+          <div><dt>Zapłacono</dt><dd id="r-paid"></dd></div>
+        </dl>
+        <p class="payout"><span id="r-label">Do wypłaty</span><strong id="r-payout"></strong></p>
+      </section>
+
+      <div class="actions">
+        <button type="submit" id="add" class="primary" disabled>Dodaj do listy</button>
+        <button type="button" id="clear-form" class="ghost">Wyczyść formularz</button>
+      </div>
+    </form>
+
+    <section class="card" aria-labelledby="list-title">
+      <h2 id="list-title">Lista pozycji</h2>
+      <p id="empty" class="muted">Brak pozycji. Wynik pojedynczej pozycji widać wyżej.</p>
+      <ul id="list" class="list"></ul>
+      <p id="total-box" class="total" hidden><span>Razem do wypłaty</span><strong id="total"></strong></p>
+      <button type="button" id="clear-list" class="ghost danger" hidden>Wyczyść listę</button>
+    </section>
+
+    <p class="note">
+      Wynik jest pomocniczy. O wypłacie rozstrzyga system i zasady sklepu.
+      Nie wpisuj tu danych klientów ani danych z systemów firmowych.
+    </p>
+  </main>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

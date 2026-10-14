@@ -1,0 +1,12 @@
+{
+  "name": "roznica-cen",
+  "version": "0.1.0",
+  "description": "Prywatny kalkulator różnic cen (półka vs paragon) do użycia na telefonie. Aplikacja PWA bez serwera.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "serve": "python3 -m http.server 8080 --directory public"
+  },
+  "license": "UNLICENSED"
+}
