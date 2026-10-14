@@ -278,8 +278,25 @@ el.form.addEventListener("submit", (event) => {
 
 el.clearForm.addEventListener("click", resetForm);
 
+// Potwierdzenie w samej stronie (okna dialogowe przeglądarki bywają zablokowane).
+const CLEAR_LABEL = "Wyczyść listę";
+let clearArmed = false;
+let clearTimer = null;
+
+function disarmClear() {
+  clearArmed = false;
+  clearTimeout(clearTimer);
+  el.clearList.textContent = CLEAR_LABEL;
+}
+
 el.clearList.addEventListener("click", () => {
-  if (!window.confirm("Wyczyścić całą listę?")) return;
+  if (!clearArmed) {
+    clearArmed = true;
+    el.clearList.textContent = "Na pewno? Dotknij ponownie";
+    clearTimer = setTimeout(disarmClear, 4000);
+    return;
+  }
+  disarmClear();
   items = [];
   saveItems();
   renderList();
