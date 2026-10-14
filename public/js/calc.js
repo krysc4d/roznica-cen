@@ -12,6 +12,12 @@ export function parseMoney(input) {
   return zl * 100 + gr;
 }
 
+/** 1299 -> "12,99" (do wpisania w pole formularza, bez waluty). */
+export function moneyInputValue(grosze) {
+  const abs = Math.abs(grosze);
+  return `${grosze < 0 ? "-" : ""}${Math.floor(abs / 100)},${String(abs % 100).padStart(2, "0")}`;
+}
+
 /** 1299 -> "12,99 zł" (z odstępem tysięcy i znakiem minus). */
 export function formatMoney(grosze) {
   const sign = grosze < 0 ? "-" : "";
@@ -19,6 +25,37 @@ export function formatMoney(grosze) {
   const zl = String(Math.floor(abs / 100)).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
   const gr = String(abs % 100).padStart(2, "0");
   return `${sign}${zl},${gr} zł`;
+}
+
+/** "1,094" lub "3" -> tysięczne części (1094 lub 3000). Do 3 miejsc po przecinku, null gdy niepoprawne. */
+export function parseQtyMilli(input) {
+  if (input === null || input === undefined) return null;
+  const s = String(input).trim().replace(",", ".").replace(/\s*(kg|szt\.?)$/i, "");
+  const m = /^(\d+)(?:\.(\d{0,3}))?$/.exec(s);
+  if (!m) return null;
+  const milli = parseInt(m[1], 10) * 1000 + parseInt((m[2] || "").padEnd(3, "0"), 10);
+  return milli > 0 ? milli : null;
+}
+
+/** 1094 -> "1,094", 3000 -> "3" (bez zbędnych zer). */
+export function formatQty(qtyMilli) {
+  const whole = Math.floor(qtyMilli / 1000);
+  const frac = String(qtyMilli % 1000).padStart(3, "0").replace(/0+$/, "");
+  return frac ? `${whole},${frac}` : String(whole);
+}
+
+/**
+ * Sprawdza, czy data zakupu mieści się w okresie ważności ceny z półki.
+ * Daty w formacie RRRR-MM-DD (porównanie tekstowe jest poprawne dla tego formatu).
+ * Zwraca "ok", "przed", "po" albo null, gdy brakuje danych.
+ */
+export function checkValidity(purchase, from, to) {
+  const iso = /^\d{4}-\d{2}-\d{2}$/;
+  if (!iso.test(purchase || "")) return null;
+  if (!iso.test(from || "") && !iso.test(to || "")) return null;
+  if (iso.test(from || "") && purchase < from) return "przed";
+  if (iso.test(to || "") && purchase > to) return "po";
+  return "ok";
 }
 
 /** Dzielenie całkowite z zaokrągleniem połówek w górę (dla liczb nieujemnych). */
@@ -80,8 +117,19 @@ export function amountOwed(unit, qty, promo = { type: "none" }) {
  * Zwraca { ok, error?, owed, paid, payout, status }.
  */
 export function computeItem(item) {
-  const { qty, shelfUnit, promo, paidUnit, paidTotal } = item;
-  if (!Number.isInteger(qty) || qty < 1) return { ok: false, error: "Podaj ilość (liczba całkowita, min. 1)." };
+  const { shelfUnit, promo, paidUnit, paidTotal } = item;
+  // Ilość: qtyMilli (tysięczne części, np. 1,094 kg = 1094) albo qty (sztuki, liczba całkowita).
+  let qtyMilli;
+  if (item.qtyMilli !== undefined && item.qtyMilli !== null) {
+    qtyMilli = item.qtyMilli;
+  } else if (Number.isInteger(item.qty)) {
+    qtyMilli = item.qty * 1000;
+  } else {
+    return { ok: false, error: "Podaj ilość (np. 2 albo 1,094 dla wagi)." };
+  }
+  if (!Number.isInteger(qtyMilli) || qtyMilli < 1) return { ok: false, error: "Podaj ilość (np. 2 albo 1,094 dla wagi)." };
+  const isWeight = qtyMilli % 1000 !== 0;
+  const qty = qtyMilli / 1000;
   if (shelfUnit === null || shelfUnit === undefined) return { ok: false, error: "Podaj cenę z półki." };
   if (paidTotal === null || paidTotal === undefined) {
     if (paidUnit === null || paidUnit === undefined) return { ok: false, error: "Podaj cenę z paragonu." };
@@ -93,12 +141,24 @@ export function computeItem(item) {
     ((p.type === "second_percent" || p.type === "percent") && !(Number.isInteger(p.tenths) && p.tenths > 0 && p.tenths < 1000));
   if (badPromo) return { ok: false, error: "Uzupełnij warunki promocji." };
 
-  const owed = amountOwed(shelfUnit, qty, p);
-  const paid = paidTotal !== null && paidTotal !== undefined ? paidTotal : paidUnit * qty;
+  if (isWeight && p.type !== "none" && p.type !== "percent") {
+    return { ok: false, error: "Ta promocja dotyczy sztuk (liczba całkowita). Dla wagi wybierz brak promocji albo rabat %." };
+  }
+
+  let owed;
+  let paid;
+  if (isWeight) {
+    const unitAfter = p.type === "percent" ? priceAfterPercent(shelfUnit, p.tenths) : shelfUnit;
+    owed = roundDiv(qtyMilli * unitAfter, 1000);
+    paid = paidTotal !== null && paidTotal !== undefined ? paidTotal : roundDiv(qtyMilli * paidUnit, 1000);
+  } else {
+    owed = amountOwed(shelfUnit, qty, p);
+    paid = paidTotal !== null && paidTotal !== undefined ? paidTotal : paidUnit * qty;
+  }
   const diff = paid - owed;
   const payout = Math.max(0, diff);
   const status = diff > 0 ? "nadplata" : diff === 0 ? "zgodnie" : "mniej";
-  return { ok: true, owed, paid, payout, status };
+  return { ok: true, owed, paid, payout, status, qtyMilli };
 }
 
 /** Suma do wypłaty z listy pozycji. Pozycje z niższą ceną na paragonie nie pomniejszają sumy. */

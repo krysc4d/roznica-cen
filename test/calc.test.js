@@ -3,6 +3,9 @@ import assert from "node:assert/strict";
 import {
   parseMoney,
   formatMoney,
+  parseQtyMilli,
+  formatQty,
+  checkValidity,
   parsePercentTenths,
   priceAfterPercent,
   amountOwed,
@@ -148,4 +151,66 @@ test("brak błędów zmiennoprzecinkowych", () => {
   // klasyczny przykład: 0,1 + 0,2
   const r = computeItem({ qty: 3, shelfUnit: 10, paidUnit: 20 }); // 0,10 vs 0,20
   assert.equal(r.payout, 30);
+});
+
+test("parseQtyMilli i formatQty", () => {
+  assert.equal(parseQtyMilli("1,094"), 1094);
+  assert.equal(parseQtyMilli("3"), 3000);
+  assert.equal(parseQtyMilli("0,5 kg"), 500);
+  assert.equal(parseQtyMilli("0,164"), 164);
+  assert.equal(parseQtyMilli("1,0945"), null);
+  assert.equal(parseQtyMilli("0"), null);
+  assert.equal(parseQtyMilli("abc"), null);
+  assert.equal(formatQty(1094), "1,094");
+  assert.equal(formatQty(3000), "3");
+  assert.equal(formatQty(500), "0,5");
+});
+
+test("waga: pozycje z prawdziwego paragonu (kwoty zgodne z paragonem)", () => {
+  // udo z kurczaka 1,094 kg po 12,39 = 13,55
+  const udo = computeItem({ qtyMilli: 1094, shelfUnit: 1239, paidUnit: 1239 });
+  assert.equal(udo.paid, 1355);
+  assert.equal(udo.owed, 1355);
+  // śliwka 0,866 kg po 6,99 = 6,05
+  assert.equal(computeItem({ qtyMilli: 866, shelfUnit: 699, paidUnit: 699 }).paid, 605);
+  // metka łososiowa 0,164 kg po 34,49 = 5,66
+  assert.equal(computeItem({ qtyMilli: 164, shelfUnit: 3449, paidUnit: 3449 }).paid, 566);
+});
+
+test("waga: różnica ceny za kg", () => {
+  // na paragonie 12,39/kg, na półce 9,99/kg, 1,094 kg
+  const r = computeItem({ qtyMilli: 1094, shelfUnit: 999, paidUnit: 1239 });
+  assert.equal(r.owed, 1093); // 1,094 * 9,99 = 10,93
+  assert.equal(r.paid, 1355);
+  assert.equal(r.payout, 262);
+});
+
+test("waga: opust z paragonu przez paidTotal", () => {
+  // udo: 13,55 minus opust 4,81 = 8,74 zapłacone; po półkowej cenie 12,39 należało 13,55
+  const r = computeItem({ qtyMilli: 1094, shelfUnit: 1239, paidUnit: 1239, paidTotal: 874 });
+  assert.equal(r.paid, 874);
+  assert.equal(r.payout, 0);
+});
+
+test("waga: promocje wielosztukowe są odrzucone, rabat % działa", () => {
+  const bad = computeItem({ qtyMilli: 1500, shelfUnit: 1000, paidUnit: 1000, promo: { type: "free", x: 2, y: 1 } });
+  assert.equal(bad.ok, false);
+  const pct = computeItem({ qtyMilli: 1500, shelfUnit: 1000, paidUnit: 1000, promo: { type: "percent", tenths: 200 } });
+  assert.equal(pct.ok, true);
+  assert.equal(pct.owed, 1200); // 1,5 kg po 8,00
+});
+
+test("qtyMilli całkowite działa jak sztuki", () => {
+  const a = computeItem({ qtyMilli: 3000, shelfUnit: 399, paidUnit: 399, promo: { type: "multi_price", n: 3, total: 1000 } });
+  assert.equal(a.owed, 1000);
+  assert.equal(a.payout, 197);
+});
+
+test("checkValidity", () => {
+  assert.equal(checkValidity("2026-10-14", "2026-10-05", "2026-10-17"), "ok");
+  assert.equal(checkValidity("2026-10-04", "2026-10-05", "2026-10-17"), "przed");
+  assert.equal(checkValidity("2026-10-18", "2026-10-05", "2026-10-17"), "po");
+  assert.equal(checkValidity("2026-10-14", "", "2026-10-17"), "ok");
+  assert.equal(checkValidity("", "2026-10-05", "2026-10-17"), null);
+  assert.equal(checkValidity("2026-10-14", "", ""), null);
 });

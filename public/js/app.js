@@ -1,6 +1,10 @@
 import {
   parseMoney,
+  moneyInputValue,
   formatMoney,
+  parseQtyMilli,
+  formatQty,
+  checkValidity,
   parsePercentTenths,
   computeItem,
 } from "./calc.js";
@@ -21,6 +25,11 @@ const el = {
   ppP: $("pp-p"),
   paid: $("paid"),
   paidTotal: $("paid-total"),
+  dates: $("dates"),
+  buyDate: $("buy-date"),
+  validFrom: $("valid-from"),
+  validTo: $("valid-to"),
+  validity: $("validity"),
   error: $("error"),
   result: $("result"),
   rOwed: $("r-owed"),
@@ -42,14 +51,21 @@ const el = {
   },
 };
 
-/** @type {Array<{name:string, qty:number, owed:number, paid:number, payout:number, promoLabel:string}>} */
+/** @type {Array<{name:string, qtyMilli:number, owed:number, paid:number, payout:number, promoLabel:string, validity:string|null}>} */
 let items = loadItems();
 
 function loadItems() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) return [];
+    // Starsze wpisy miały tylko całkowitą liczbę sztuk (qty).
+    return parsed
+      .filter((it) => it && typeof it === "object")
+      .map((it) => ({
+        ...it,
+        qtyMilli: Number.isInteger(it.qtyMilli) ? it.qtyMilli : Number.isInteger(it.qty) ? it.qty * 1000 : 1000,
+      }));
   } catch {
     return [];
   }
@@ -72,6 +88,16 @@ function readIntOrNull(input) {
   return /^\d+$/.test(s) ? parseInt(s, 10) : null;
 }
 
+function qtyText(qtyMilli) {
+  return `${formatQty(qtyMilli)} ${qtyMilli % 1000 === 0 ? "szt." : "kg"}`;
+}
+
+/** 2026-10-14 -> 14.10.2026 */
+function datePL(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || "");
+  return m ? `${m[3]}.${m[2]}.${m[1]}` : "";
+}
+
 function promoLabel(promo) {
   switch (promo.type) {
     case "multi_price":
@@ -87,7 +113,7 @@ function promoLabel(promo) {
   }
 }
 
-/** Czyta pola formularza. Zwraca { item, touched } gdzie item jest gotowy do computeItem. */
+/** Czyta pola formularza. Zwraca obiekt gotowy do computeItem. */
 function readForm() {
   const type = el.promo.value;
   let promo = { type: "none" };
@@ -99,7 +125,7 @@ function readForm() {
     promo = { type, tenths: parsePercentTenths(el.ppP.value) };
   }
   return {
-    qty: readIntOrNull(el.qty),
+    qtyMilli: parseQtyMilli(el.qty.value),
     shelfUnit: parseMoney(el.shelf.value),
     promo,
     paidUnit: parseMoney(el.paid.value),
@@ -137,22 +163,44 @@ function promoFieldsBroken() {
 
 let lastResult = null;
 let lastItem = null;
+let lastValidity = null;
+
+/** Porównuje datę zakupu z okresem ważności ceny z półki i pokazuje komunikat. */
+function updateValidity() {
+  const v = checkValidity(el.buyDate.value, el.validFrom.value, el.validTo.value);
+  lastValidity = v;
+  if (v === null) {
+    el.validity.hidden = true;
+    return;
+  }
+  const range = [datePL(el.validFrom.value) || "...", datePL(el.validTo.value) || "..."].join(" do ");
+  el.validity.hidden = false;
+  el.validity.dataset.state = v === "ok" ? "ok" : "warn";
+  if (v === "ok") {
+    el.validity.textContent = `Data zakupu (${datePL(el.buyDate.value)}) mieści się w okresie ważności ceny z półki (${range}).`;
+  } else if (v === "przed") {
+    el.validity.textContent = `Uwaga: zakup z ${datePL(el.buyDate.value)} był przed początkiem ważności tej ceny z półki (${range}). Sprawdź, jaka cena obowiązywała w dniu zakupu.`;
+  } else {
+    el.validity.textContent = `Uwaga: zakup z ${datePL(el.buyDate.value)} był po końcu ważności tej ceny z półki (${range}). Sprawdź, jaka cena obowiązywała w dniu zakupu.`;
+  }
+}
 
 function update() {
   const item = readForm();
   const anyInput =
     !isBlank(el.shelf.value) || !isBlank(el.paid.value) || !isBlank(el.paidTotal.value);
 
-  setInvalid(el.qty, !isBlank(el.qty.value) && item.qty === null);
+  setInvalid(el.qty, !isBlank(el.qty.value) && item.qtyMilli === null);
   setInvalid(el.shelf, !isBlank(el.shelf.value) && item.shelfUnit === null);
   setInvalid(el.paid, !isBlank(el.paid.value) && item.paidUnit === null);
   setInvalid(el.paidTotal, !isBlank(el.paidTotal.value) && item.paidTotal === null);
+  updateValidity();
 
   // Wypełnione, ale niepoprawne pole to błąd do poprawy. Nie licz po cichu z innych pól.
   const promoBroken = promoFieldsBroken();
   let result;
-  if (!isBlank(el.qty.value) && item.qty === null) {
-    result = { ok: false, error: "Popraw ilość (liczba całkowita, np. 2)." };
+  if (!isBlank(el.qty.value) && item.qtyMilli === null) {
+    result = { ok: false, error: "Popraw ilość (np. 2 albo 1,094 dla wagi w kg)." };
   } else if (!isBlank(el.shelf.value) && item.shelfUnit === null) {
     result = { ok: false, error: "Popraw cenę z półki (np. 12,99)." };
   } else if (promoBroken) {
@@ -216,8 +264,9 @@ function renderList() {
 
     const detail = document.createElement("span");
     detail.className = "li-detail";
-    const parts = [`${it.qty} szt.`, `należało ${formatMoney(it.owed)}`, `zapłacono ${formatMoney(it.paid)}`];
+    const parts = [qtyText(it.qtyMilli), `należało ${formatMoney(it.owed)}`, `zapłacono ${formatMoney(it.paid)}`];
     if (it.promoLabel) parts.push(it.promoLabel);
+    if (it.validity === "przed" || it.validity === "po") parts.push("uwaga: poza okresem ważności ceny z półki");
     detail.textContent = parts.join(", ");
 
     const remove = document.createElement("button");
@@ -245,9 +294,12 @@ function renderList() {
   }
 }
 
-function resetForm() {
+/** Czyści formularz. Data zakupu zostaje (kolejna pozycja z tego samego paragonu), chyba że keepDate=false. */
+function resetForm(keepDate = true) {
+  const buyDate = el.buyDate.value;
   el.form.reset();
   el.qty.value = "1";
+  if (keepDate) el.buyDate.value = buyDate;
   showPromoFields();
   update();
   el.shelf.focus();
@@ -265,18 +317,22 @@ el.form.addEventListener("submit", (event) => {
   if (!lastResult || !lastResult.ok) return;
   items.push({
     name: el.name.value.trim(),
-    qty: lastItem.qty,
+    qtyMilli: lastItem.qtyMilli,
     owed: lastResult.owed,
     paid: lastResult.paid,
     payout: lastResult.payout,
     promoLabel: promoLabel(lastItem.promo),
+    validity: lastValidity,
   });
   saveItems();
   renderList();
+  // @ocr-begin
+  markReceiptItemDone();
+  // @ocr-end
   resetForm();
 });
 
-el.clearForm.addEventListener("click", resetForm);
+el.clearForm.addEventListener("click", () => resetForm(false));
 
 // Potwierdzenie w samej stronie (okna dialogowe przeglądarki bywają zablokowane).
 const CLEAR_LABEL = "Wyczyść listę";
@@ -301,6 +357,253 @@ el.clearList.addEventListener("click", () => {
   saveItems();
   renderList();
 });
+
+// @ocr-begin
+// ---------------------------------------------------------------------------
+// Zdjęcia: paragon i etykieta półkowa (OCR lokalnie w telefonie, zdjęcia nigdzie nie wychodzą)
+// ---------------------------------------------------------------------------
+const RECEIPT_KEY = "roznica-cen:paragon:v1";
+
+Object.assign(el, {
+  rcScan: $("rc-scan"),
+  rcFile: $("rc-file"),
+  rcStatus: $("rc-status"),
+  rcResult: $("rc-result"),
+  rcMeta: $("rc-meta"),
+  rcIssues: $("rc-issues"),
+  rcItems: $("rc-items"),
+  rcClose: $("rc-close"),
+  lbScan: $("lb-scan"),
+  lbFile: $("lb-file"),
+  lbStatus: $("lb-status"),
+});
+
+/** @type {null | {date:string|null, time:string|null, issues:Array, sumOk:boolean, items:Array}} */
+let receipt = loadReceipt();
+let activeReceiptIndex = null;
+let scannerPromise = null;
+
+function loadReceipt() {
+  try {
+    const raw = localStorage.getItem(RECEIPT_KEY);
+    const r = raw ? JSON.parse(raw) : null;
+    return r && Array.isArray(r.items) ? r : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveReceipt() {
+  try {
+    if (receipt) localStorage.setItem(RECEIPT_KEY, JSON.stringify(receipt));
+    else localStorage.removeItem(RECEIPT_KEY);
+  } catch {
+    /* brak pamięci przeglądarki: paragon zostaje tylko do zamknięcia aplikacji */
+  }
+}
+
+function setStatus(node, text, state) {
+  node.hidden = !text;
+  node.textContent = text || "";
+  if (state) node.dataset.state = state;
+  else delete node.dataset.state;
+}
+
+function setBusy(busy) {
+  el.rcScan.disabled = busy;
+  el.lbScan.disabled = busy;
+}
+
+function loadScanner() {
+  if (!scannerPromise) {
+    scannerPromise = import("./scan.js").catch((err) => {
+      scannerPromise = null;
+      throw err;
+    });
+  }
+  return scannerPromise;
+}
+
+const LEVEL_PREFIX = { ok: "OK: ", warn: "Uwaga: ", info: "Info: " };
+
+function renderReceipt() {
+  el.rcResult.hidden = !receipt;
+  if (!receipt) return;
+
+  const when = [datePL(receipt.date), receipt.time].filter(Boolean).join(" ");
+  el.rcMeta.textContent = `${when ? when + ", " : ""}pozycji: ${receipt.items.length}`;
+
+  el.rcIssues.textContent = "";
+  for (const issue of receipt.issues) {
+    const li = document.createElement("li");
+    li.dataset.level = issue.level;
+    li.textContent = (LEVEL_PREFIX[issue.level] || "") + issue.text;
+    el.rcIssues.append(li);
+  }
+
+  el.rcItems.textContent = "";
+  receipt.items.forEach((it, index) => {
+    const li = document.createElement("li");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "rc-item";
+    if (it.check) btn.dataset.check = "true";
+    if (it.done) btn.dataset.done = "true";
+    if (index === activeReceiptIndex) btn.setAttribute("aria-current", "true");
+
+    const name = document.createElement("span");
+    name.className = "rc-name";
+    name.textContent = it.name || `Pozycja ${index + 1}`;
+    const amount = document.createElement("span");
+    amount.className = "rc-amount";
+    amount.textContent = formatMoney(it.total - (it.discount || 0));
+    const detail = document.createElement("span");
+    detail.className = "rc-detail";
+    const bits = [`${qtyText(it.qtyMilli)} po ${formatMoney(it.unit)}`];
+    if (it.discount) bits.push(`opust -${formatMoney(it.discount)}`);
+    detail.textContent = bits.join(", ");
+    btn.append(name, amount, detail);
+
+    if (it.done || it.check) {
+      const tag = document.createElement("span");
+      tag.className = "rc-tag";
+      tag.textContent = it.done ? "Dodano do listy" : "Sprawdź kwoty przy tej pozycji";
+      btn.append(tag);
+    }
+    btn.addEventListener("click", () => pickReceiptItem(index));
+    li.append(btn);
+    el.rcItems.append(li);
+  });
+}
+
+/** Dotknięcie pozycji z paragonu: wypełnia formularz, zostaje tylko cena z półki. */
+function pickReceiptItem(index) {
+  const it = receipt && receipt.items[index];
+  if (!it) return;
+  activeReceiptIndex = index;
+  el.form.reset();
+  el.name.value = it.name;
+  el.qty.value = formatQty(it.qtyMilli);
+  el.paid.value = moneyInputValue(it.unit);
+  if (it.discount) {
+    el.paidTotal.value = moneyInputValue(it.total - it.discount);
+    const details = el.paidTotal.closest("details");
+    if (details) details.open = true;
+  }
+  if (receipt.date) el.buyDate.value = receipt.date;
+  showPromoFields();
+  update();
+  renderReceipt();
+  el.form.scrollIntoView({ behavior: "smooth", block: "start" });
+  el.shelf.focus({ preventScroll: true });
+}
+
+function markReceiptItemDone() {
+  if (!receipt || activeReceiptIndex === null || !receipt.items[activeReceiptIndex]) return;
+  receipt.items[activeReceiptIndex].done = true;
+  activeReceiptIndex = null;
+  saveReceipt();
+  renderReceipt();
+}
+
+function scanFailed(statusNode, err) {
+  const hint = navigator.onLine
+    ? ""
+    : " Nie ma internetu, a przy pierwszym użyciu odczyt zdjęć pobiera jednorazowo około 7 MB.";
+  setStatus(
+    statusNode,
+    `Nie udało się odczytać zdjęcia (${(err && err.message) || "błąd"}).${hint} Wpisz dane ręcznie.`,
+    "error"
+  );
+}
+
+el.rcScan.addEventListener("click", () => {
+  el.rcFile.click();
+});
+
+el.rcFile.addEventListener("change", async () => {
+  const file = el.rcFile.files && el.rcFile.files[0];
+  el.rcFile.value = "";
+  if (!file) return;
+  setBusy(true);
+  setStatus(el.rcStatus, "Przygotowanie zdjęcia");
+  try {
+    const { scanReceipt } = await loadScanner();
+    const res = await scanReceipt(file, (t) => setStatus(el.rcStatus, t));
+    receipt = {
+      date: res.date,
+      time: res.time,
+      issues: res.issues,
+      sumOk: res.sumOk,
+      items: res.items.map((it) => ({
+        name: it.name,
+        qtyMilli: it.qtyMilli,
+        unit: it.unit,
+        total: it.total,
+        discount: it.discount,
+        check: it.check,
+        done: false,
+      })),
+    };
+    activeReceiptIndex = null;
+    saveReceipt();
+    renderReceipt();
+    if (receipt.items.length) {
+      setStatus(el.rcStatus, "Gotowe. Dotknij pozycji, której dotyczy sprawa.", "ok");
+    } else {
+      setStatus(el.rcStatus, "Nie znaleziono pozycji. Zrób zdjęcie z bliska i równo.", "error");
+    }
+  } catch (err) {
+    scanFailed(el.rcStatus, err);
+  } finally {
+    setBusy(false);
+  }
+});
+
+el.rcClose.addEventListener("click", () => {
+  receipt = null;
+  activeReceiptIndex = null;
+  saveReceipt();
+  renderReceipt();
+  setStatus(el.rcStatus, "");
+});
+
+el.lbScan.addEventListener("click", () => {
+  el.lbFile.click();
+});
+
+el.lbFile.addEventListener("change", async () => {
+  const file = el.lbFile.files && el.lbFile.files[0];
+  el.lbFile.value = "";
+  if (!file) return;
+  setBusy(true);
+  setStatus(el.lbStatus, "Przygotowanie zdjęcia");
+  try {
+    const { scanLabel } = await loadScanner();
+    const res = await scanLabel(file, (t) => setStatus(el.lbStatus, t));
+    if (res.price === null) {
+      setStatus(el.lbStatus, "Nie widzę ceny na etykiecie. Zrób zdjęcie bliżej albo wpisz cenę ręcznie.", "error");
+      return;
+    }
+    el.shelf.value = moneyInputValue(res.price);
+    if (res.from) el.validFrom.value = res.from;
+    if (res.to) el.validTo.value = res.to;
+    if (res.from || res.to) el.dates.open = true;
+    if (isBlank(el.name.value) && res.name) el.name.value = res.name.slice(0, 60);
+    update();
+    const bits = [`cena ${formatMoney(res.price)}${res.unitKind ? "/" + res.unitKind : ""}`];
+    if (res.from && res.to) bits.push(`ważna ${datePL(res.from)} do ${datePL(res.to)}`);
+    if (res.minQty && res.minQty > 1) bits.push(`cena przy zakupie min. ${res.minQty} szt.`);
+    setStatus(el.lbStatus, `Odczytano: ${bits.join(", ")}. Porównaj z etykietą.`, "ok");
+  } catch (err) {
+    scanFailed(el.lbStatus, err);
+  } finally {
+    setBusy(false);
+  }
+});
+
+renderReceipt();
+// @ocr-end
 
 showPromoFields();
 update();

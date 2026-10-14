@@ -18,19 +18,43 @@
   </header>
 
   <main>
+    <!-- @ocr-begin -->
+    <section class="card" aria-labelledby="rc-title">
+      <h2 id="rc-title">Paragon ze zdjęcia</h2>
+      <p id="rc-hint" class="muted">Zrób zdjęcie paragonu i dotknij pozycji, której dotyczy sprawa. Formularz wypełni się sam.</p>
+      <button type="button" id="rc-scan" class="primary">Zrób zdjęcie paragonu</button>
+      <input id="rc-file" type="file" accept="image/*" hidden>
+      <p id="rc-status" class="status" role="status" aria-live="polite" hidden></p>
+      <div id="rc-result" hidden>
+        <p id="rc-meta" class="muted"></p>
+        <ul id="rc-issues" class="issues"></ul>
+        <ul id="rc-items" class="rc-items"></ul>
+        <button type="button" id="rc-close" class="ghost">Zamknij paragon</button>
+      </div>
+    </section>
+    <!-- @ocr-end -->
+
     <form id="form" class="card" novalidate autocomplete="off">
       <label class="field">
         <span>Produkt lub EAN (opcjonalnie)</span>
         <input id="name" type="text" maxlength="60" placeholder="np. groszek 400 g">
       </label>
 
+      <!-- @ocr-begin -->
+      <div class="scan-row">
+        <button type="button" id="lb-scan" class="ghost">Zdjęcie etykiety z półki</button>
+        <input id="lb-file" type="file" accept="image/*" hidden>
+        <p id="lb-status" class="status" role="status" aria-live="polite" hidden></p>
+      </div>
+      <!-- @ocr-end -->
+
       <div class="row">
         <label class="field">
-          <span>Ilość</span>
-          <input id="qty" type="text" inputmode="numeric" value="1" aria-describedby="qty-err">
+          <span>Ilość lub waga (kg)</span>
+          <input id="qty" type="text" inputmode="decimal" value="1">
         </label>
         <label class="field">
-          <span>Cena z półki (za 1 szt.)</span>
+          <span>Cena z półki (za szt. lub kg)</span>
           <input id="shelf" type="text" inputmode="decimal" placeholder="0,00">
         </label>
       </div>
@@ -59,9 +83,21 @@
       </div>
 
       <label class="field">
-        <span>Cena z paragonu (za 1 szt.)</span>
+        <span>Cena z paragonu (za szt. lub kg)</span>
         <input id="paid" type="text" inputmode="decimal" placeholder="0,00">
       </label>
+
+      <details id="dates">
+        <summary>Daty: zakup i ważność ceny z półki</summary>
+        <div class="dates">
+          <label class="field"><span>Data zakupu</span><input id="buy-date" type="date"></label>
+          <div class="row">
+            <label class="field"><span>Cena z półki od</span><input id="valid-from" type="date"></label>
+            <label class="field"><span>Cena z półki do</span><input id="valid-to" type="date"></label>
+          </div>
+        </div>
+      </details>
+      <p id="validity" class="validity" role="status" hidden></p>
 
       <details>
         <summary>Na paragonie są osobne rabaty</summary>

@@ -12,11 +12,16 @@ const css = read("css/style.css")
 
 // JS: calc.js bez "export", app.js bez importu i bez rejestracji service workera.
 const calc = read("js/calc.js").replace(/^export /gm, "");
-let app = read("js/app.js")
+// Fragmenty między znacznikami @ocr-begin i @ocr-end (zdjęcia, OCR) wchodzą tylko do wersji na GitHub Pages,
+// bo artefakt nie ma service workera ani plików silnika odczytu.
+const stripJs = (src) => src.replace(/^[ \t]*\/\/ @ocr-begin[\s\S]*?\/\/ @ocr-end\n/gm, "");
+const stripHtml = (src) => src.replace(/^[ \t]*<!-- @ocr-begin -->[\s\S]*?<!-- @ocr-end -->\n/gm, "");
+
+let app = stripJs(read("js/app.js"))
   .replace(/import \{[\s\S]*?\} from "\.\/calc\.js";\n/, "")
   .replace(/if \("serviceWorker" in navigator\) \{[\s\S]*$/, "");
 
-const body = read("index.html")
+const body = stripHtml(read("index.html"))
   .match(/<body>([\s\S]*)<\/body>/)[1]
   .replace(/<script type="module" src="js\/app\.js"><\/script>/, "")
   .trim();

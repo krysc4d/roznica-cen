@@ -6,7 +6,13 @@
   "type": "module",
   "scripts": {
     "test": "node --test test/*.test.js",
-    "serve": "python3 -m http.server 8080 --directory public"
+    "serve": "python3 -m http.server 8080 --directory public",
+    "vendor": "node scripts/vendor-ocr.mjs"
   },
-  "license": "UNLICENSED"
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "@tesseract.js-data/pol": "1.0.0",
+    "tesseract.js": "7.0.0",
+    "tesseract.js-core": "7.0.0"
+  }
 }
