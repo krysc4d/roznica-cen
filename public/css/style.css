@@ -238,3 +238,5 @@ button.danger { color: var(--danger); border-color: var(--danger); }
 .validity { margin: 0; font-size: 0.9rem; }
 .validity[data-state="ok"] { color: var(--ok); }
 .validity[data-state="warn"] { color: var(--warn); font-weight: 600; }
+
+.raw { margin: 0; padding: 8px; max-height: 260px; overflow: auto; white-space: pre-wrap; word-break: break-word; font-size: 0.75rem; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; }

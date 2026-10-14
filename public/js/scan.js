@@ -4,14 +4,14 @@
 import { readText } from "./ocr.js";
 import { parseReceipt, betterReceipt, parseLabel } from "./receipt.js";
 
-/** Paragon: do dwóch podejść, zatrzymuje się, gdy suma pozycji zgadza się z sumą na paragonie. */
+/** Paragon: do dwóch podejść (wynik zawiera też surowy tekst `raw` do diagnozy), zatrzymuje się, gdy suma pozycji zgadza się z sumą na paragonie. */
 export async function scanReceipt(file, onStatus) {
-  const first = parseReceipt(await readText(file, { mode: "receipt", psm: "6", onStatus }));
+  const text1 = await readText(file, { mode: "receipt", psm: "6", onStatus });
+  const first = { ...parseReceipt(text1), raw: text1 };
   if (first.sumOk) return first;
   if (onStatus) onStatus("Suma się nie zgadza, próbuję drugi raz");
-  const second = parseReceipt(
-    await readText(file, { mode: "receipt", psm: "6", prepare: { stretch: true }, onStatus })
-  );
+  const text2 = await readText(file, { mode: "receipt", psm: "6", prepare: { stretch: true }, onStatus });
+  const second = { ...parseReceipt(text2), raw: text2 };
   return betterReceipt(first, second);
 }
 

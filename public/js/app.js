@@ -365,15 +365,20 @@ el.clearList.addEventListener("click", () => {
 const RECEIPT_KEY = "roznica-cen:paragon:v1";
 
 Object.assign(el, {
-  rcScan: $("rc-scan"),
+  rcCamera: $("rc-camera"),
+  rcGallery: $("rc-gallery"),
+  rcFileCam: $("rc-file-cam"),
   rcFile: $("rc-file"),
   rcStatus: $("rc-status"),
   rcResult: $("rc-result"),
   rcMeta: $("rc-meta"),
   rcIssues: $("rc-issues"),
   rcItems: $("rc-items"),
+  rcRaw: $("rc-raw"),
   rcClose: $("rc-close"),
-  lbScan: $("lb-scan"),
+  lbCamera: $("lb-camera"),
+  lbGallery: $("lb-gallery"),
+  lbFileCam: $("lb-file-cam"),
   lbFile: $("lb-file"),
   lbStatus: $("lb-status"),
 });
@@ -382,6 +387,7 @@ Object.assign(el, {
 let receipt = loadReceipt();
 let activeReceiptIndex = null;
 let scannerPromise = null;
+let receiptRaw = ""; // surowy tekst z OCR, tylko w pamięci (nie zapisujemy go w telefonie)
 
 function loadReceipt() {
   try {
@@ -410,8 +416,7 @@ function setStatus(node, text, state) {
 }
 
 function setBusy(busy) {
-  el.rcScan.disabled = busy;
-  el.lbScan.disabled = busy;
+  for (const b of [el.rcCamera, el.rcGallery, el.lbCamera, el.lbGallery]) b.disabled = busy;
 }
 
 function loadScanner() {
@@ -433,6 +438,7 @@ function renderReceipt() {
   const when = [datePL(receipt.date), receipt.time].filter(Boolean).join(" ");
   el.rcMeta.textContent = `${when ? when + ", " : ""}pozycji: ${receipt.items.length}`;
 
+  el.rcRaw.textContent = receiptRaw || "(po przeładowaniu aplikacji surowy tekst nie jest przechowywany)";
   el.rcIssues.textContent = "";
   for (const issue of receipt.issues) {
     const li = document.createElement("li");
@@ -517,13 +523,15 @@ function scanFailed(statusNode, err) {
   );
 }
 
-el.rcScan.addEventListener("click", () => {
-  el.rcFile.click();
-});
+// Dwa wejścia na zdjęcie: aparat (capture) i galeria. Na części telefonów zwykły wybór pliku pokazuje tylko galerię.
+el.rcCamera.addEventListener("click", () => el.rcFileCam.click());
+el.rcGallery.addEventListener("click", () => el.rcFile.click());
+el.lbCamera.addEventListener("click", () => el.lbFileCam.click());
+el.lbGallery.addEventListener("click", () => el.lbFile.click());
 
-el.rcFile.addEventListener("change", async () => {
-  const file = el.rcFile.files && el.rcFile.files[0];
-  el.rcFile.value = "";
+async function handleReceiptFile(input) {
+  const file = input.files && input.files[0];
+  input.value = "";
   if (!file) return;
   setBusy(true);
   setStatus(el.rcStatus, "Przygotowanie zdjęcia");
@@ -546,6 +554,7 @@ el.rcFile.addEventListener("change", async () => {
       })),
     };
     activeReceiptIndex = null;
+    receiptRaw = res.raw || "";
     saveReceipt();
     renderReceipt();
     if (receipt.items.length) {
@@ -558,23 +567,22 @@ el.rcFile.addEventListener("change", async () => {
   } finally {
     setBusy(false);
   }
-});
+}
+el.rcFile.addEventListener("change", () => handleReceiptFile(el.rcFile));
+el.rcFileCam.addEventListener("change", () => handleReceiptFile(el.rcFileCam));
 
 el.rcClose.addEventListener("click", () => {
   receipt = null;
   activeReceiptIndex = null;
+  receiptRaw = "";
   saveReceipt();
   renderReceipt();
   setStatus(el.rcStatus, "");
 });
 
-el.lbScan.addEventListener("click", () => {
-  el.lbFile.click();
-});
-
-el.lbFile.addEventListener("change", async () => {
-  const file = el.lbFile.files && el.lbFile.files[0];
-  el.lbFile.value = "";
+async function handleLabelFile(input) {
+  const file = input.files && input.files[0];
+  input.value = "";
   if (!file) return;
   setBusy(true);
   setStatus(el.lbStatus, "Przygotowanie zdjęcia");
@@ -600,7 +608,9 @@ el.lbFile.addEventListener("change", async () => {
   } finally {
     setBusy(false);
   }
-});
+}
+el.lbFile.addEventListener("change", () => handleLabelFile(el.lbFile));
+el.lbFileCam.addEventListener("change", () => handleLabelFile(el.lbFileCam));
 
 renderReceipt();
 // @ocr-end

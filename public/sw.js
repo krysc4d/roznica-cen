@@ -1,7 +1,7 @@
 // Service worker: aplikacja działa offline po pierwszym otwarciu.
 // Pliki silnika odczytu zdjęć (vendor/) trafiają do pamięci przy pierwszym użyciu, więc potem działają offline.
 // Przy zmianie plików podbij numer wersji, żeby telefon pobrał nowe.
-const CACHE = "roznica-cen-v2";
+const CACHE = "roznica-cen-v3";
 const FILES = [
   "./",
   "index.html",

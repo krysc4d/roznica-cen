@@ -22,13 +22,21 @@
     <section class="card" aria-labelledby="rc-title">
       <h2 id="rc-title">Paragon ze zdjęcia</h2>
       <p id="rc-hint" class="muted">Zrób zdjęcie paragonu i dotknij pozycji, której dotyczy sprawa. Formularz wypełni się sam.</p>
-      <button type="button" id="rc-scan" class="primary">Zrób zdjęcie paragonu</button>
+      <div class="actions">
+        <button type="button" id="rc-camera" class="primary">Zrób zdjęcie paragonu</button>
+        <button type="button" id="rc-gallery" class="ghost">Wybierz z galerii</button>
+      </div>
+      <input id="rc-file-cam" type="file" accept="image/*" capture="environment" hidden>
       <input id="rc-file" type="file" accept="image/*" hidden>
       <p id="rc-status" class="status" role="status" aria-live="polite" hidden></p>
       <div id="rc-result" hidden>
         <p id="rc-meta" class="muted"></p>
         <ul id="rc-issues" class="issues"></ul>
         <ul id="rc-items" class="rc-items"></ul>
+        <details>
+          <summary>Pokaż odczytany tekst (do diagnozy)</summary>
+          <pre id="rc-raw" class="raw"></pre>
+        </details>
         <button type="button" id="rc-close" class="ghost">Zamknij paragon</button>
       </div>
     </section>
@@ -42,7 +50,11 @@
 
       <!-- @ocr-begin -->
       <div class="scan-row">
-        <button type="button" id="lb-scan" class="ghost">Zdjęcie etykiety z półki</button>
+        <div class="row">
+          <button type="button" id="lb-camera" class="ghost">Zdjęcie etykiety</button>
+          <button type="button" id="lb-gallery" class="ghost">Z galerii</button>
+        </div>
+        <input id="lb-file-cam" type="file" accept="image/*" capture="environment" hidden>
         <input id="lb-file" type="file" accept="image/*" hidden>
         <p id="lb-status" class="status" role="status" aria-live="polite" hidden></p>
       </div>
